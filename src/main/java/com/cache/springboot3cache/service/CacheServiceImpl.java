@@ -1,6 +1,5 @@
 package com.cache.springboot3cache.service;
 
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
@@ -34,6 +33,14 @@ public class CacheServiceImpl implements CacheService {
         System.out.println("get from method");
         // 返回带自增序号的字符串，以便观察缓存刷新效果
         return "test-" + atomicInteger.incrementAndGet();
+    }
+
+    @Override
+    @Cacheable(cacheNames = "testAsync#9#6", key = "#key", sync = true)
+    public String getAsync(String key) {
+        System.out.println("get from method");
+        // 返回带自增序号的字符串，以便观察缓存刷新效果
+        return "getAsync-" + atomicInteger.incrementAndGet();
     }
 
 

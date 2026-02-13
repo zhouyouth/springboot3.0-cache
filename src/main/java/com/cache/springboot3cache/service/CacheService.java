@@ -10,4 +10,6 @@ public interface CacheService {
      * @return 缓存值
      */
     String get(String key);
+
+    String getAsync(String key);
 }

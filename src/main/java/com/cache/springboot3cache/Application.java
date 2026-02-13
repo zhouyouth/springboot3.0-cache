@@ -49,6 +49,8 @@ public class Application implements CommandLineRunner {
                 try {
                     // 调用缓存服务获取数据
                     System.out.println("Cache value: " + cacheService.get("test"));
+                    System.out.println("Cache value: " + cacheService.getAsync("test_Async"));
+
                     // 休眠1秒
                     TimeUnit.SECONDS.sleep(1);
                 } catch (InterruptedException e) {
