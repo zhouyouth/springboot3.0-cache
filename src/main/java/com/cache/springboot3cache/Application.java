@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.ConfigurableApplicationContext;
 
@@ -22,6 +23,9 @@ public class Application implements CommandLineRunner {
     @Autowired
     private CacheService cacheService;
 
+    @Autowired
+    private CacheManager cacheManager;
+
     // 控制测试线程运行的标志位
     private volatile boolean running = true;
     // 测试线程
@@ -37,6 +41,9 @@ public class Application implements CommandLineRunner {
      */
     @Override
     public void run(String... args) throws Exception {
+        System.out.println("Using CacheManager: " + cacheManager.getClass().getName());
+        System.out.println("Cache Names: " + cacheManager.getCacheNames());
+
         testThread = new Thread(() -> {
             while (running) {
                 try {
@@ -47,8 +54,19 @@ public class Application implements CommandLineRunner {
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     System.out.println("Test thread interrupted");
-                } catch (Exception e) {
+                    break; // 中断后退出循环
+                } catch (IllegalStateException e) {
+                    if (e.getMessage() != null && e.getMessage().contains("destroyed")) {
+                        System.out.println("Redis connection factory destroyed, stopping test thread.");
+                        break;
+                    }
+                    // 打印其他IllegalStateException
                     e.printStackTrace();
+                } catch (Exception e) {
+                    // 打印所有其他异常的完整堆栈信息
+                    System.out.println("An error occurred in the test thread, stopping. Exception details:");
+                    e.printStackTrace();
+                    break;
                 }
             }
             System.out.println("Test thread stopped");
