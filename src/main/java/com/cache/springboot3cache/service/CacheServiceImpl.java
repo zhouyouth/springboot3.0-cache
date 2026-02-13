@@ -24,9 +24,12 @@ public class CacheServiceImpl implements CacheService {
      *
      * @param key 缓存键
      * @return 缓存值
+     * sync = true
+     * 默认 sync = false 缓存数据同步刷新(阻塞)
+     * sync = true 缓存数据异步刷新(高并发建议用)
      */
     @Override
-    @Cacheable(cacheNames = "test#6#3", key = "#key")
+    @Cacheable(cacheNames = "test#6#3", key = "#key", sync = true)
     public String get(String key) {
         System.out.println("get from method");
         // 返回带自增序号的字符串，以便观察缓存刷新效果
