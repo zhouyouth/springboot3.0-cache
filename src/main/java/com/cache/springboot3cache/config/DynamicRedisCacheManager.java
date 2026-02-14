@@ -1,5 +1,7 @@
 package com.cache.springboot3cache.config;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.cache.RedisCache;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
@@ -7,14 +9,25 @@ import org.springframework.data.redis.cache.RedisCacheWriter;
 
 import java.time.Duration;
 import java.util.concurrent.Executor;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 动态Redis缓存管理器
  * 支持解析缓存名称中的过期时间和刷新时间配置
- * 格式：cacheName#expireTime#gracePeriod
+ * 格式1：cacheName#expireTime#refreshTime (支持自动刷新)
+ * 格式2：cacheName#expireTime (仅物理过期，不刷新)
  */
 public class DynamicRedisCacheManager extends RedisCacheManager {
 
+    private static final Logger logger = LoggerFactory.getLogger(DynamicRedisCacheManager.class);
+    
+    // 格式1：name#expire#refresh
+    private static final Pattern PATTERN_WITH_REFRESH = Pattern.compile("(.+)#(\\d+)#(\\d+)");
+    
+    // 格式2：name#expire
+    private static final Pattern PATTERN_ONLY_EXPIRE = Pattern.compile("(.+)#(\\d+)");
+    
     private final RedisCacheWriter cacheWriter;
     private final Executor cacheRefreshExecutor;
 
@@ -33,8 +46,7 @@ public class DynamicRedisCacheManager extends RedisCacheManager {
 
     /**
      * 创建Redis缓存实例
-     * 根据缓存名称解析过期时间和刷新时间，如果匹配格式则创建CustomRedisCache
-     * 否则创建默认的RedisCache
+     * 根据缓存名称解析配置
      *
      * @param name 缓存名称
      * @param cacheConfig 缓存配置
@@ -42,38 +54,44 @@ public class DynamicRedisCacheManager extends RedisCacheManager {
      */
     @Override
     protected RedisCache createRedisCache(String name, RedisCacheConfiguration cacheConfig) {
-        // 使用 split 替代正则，支持更灵活的配置格式
-        String[] parts = name.split("#");
-        String cacheName = parts[0];
+        // 1. 尝试匹配 name#expire#refresh 格式
+        Matcher matcherRefresh = PATTERN_WITH_REFRESH.matcher(name);
+        if (matcherRefresh.find()) {
+            String cacheName = matcherRefresh.group(1);
+            long expire = Long.parseLong(matcherRefresh.group(2));
+            long refreshCountdown = Long.parseLong(matcherRefresh.group(3));
 
-        if (parts.length > 1) {
-            long expire = Long.parseLong(parts[1]);
-            // 默认不设置宽限期/刷新逻辑
-            RedisCacheConfiguration config = cacheConfig.entryTtl(Duration.ofSeconds(expire));
-
-            // 如果配置了第三个参数 (gracePeriod)，则启用 CustomRedisCache 的刷新逻辑
-            if (parts.length > 2) {
-                long gracePeriod = Long.parseLong(parts[2]);
-
-                // 刷新触发点：逻辑过期时间 - 宽限期
-                // 例如：6#3 -> 6 - 3 = 3秒后开始刷新
-                long refreshAge = expire - gracePeriod;
-                if (refreshAge < 0) {
-                    refreshAge = 0; // 避免负数
-                }
-
-                // 物理TTL = 逻辑过期时间 + 宽限期
-                // 这为异步刷新提供了足够的时间，防止物理过期
-                long physicalTtl = expire + gracePeriod;
-                config = config.entryTtl(Duration.ofSeconds(physicalTtl));
-
-                // 创建支持自动刷新的CustomRedisCache
-                return new CustomRedisCache(cacheName, cacheWriter, config, refreshAge, cacheRefreshExecutor);
+            // 约束校验：刷新倒计时必须小于逻辑过期时间，且至少为1秒
+            if (refreshCountdown >= expire) {
+                long correctedCountdown = Math.max(1, expire / 2);
+                logger.warn("Invalid cache configuration for '{}': refreshCountdown ({}) >= expire ({}). " +
+                        "Correcting refreshCountdown to {}s.",
+                        name, refreshCountdown, expire, correctedCountdown);
+                refreshCountdown = correctedCountdown;
+            }
+            if (refreshCountdown < 1) {
+                refreshCountdown = 1; // 刷新倒计时至少为1秒
             }
 
-            // 仅设置了过期时间，使用默认 RedisCache (或根据需求决定是否用 CustomRedisCache 但不刷新)
+            long refreshAge = expire - refreshCountdown;
+            long physicalTtl = expire + refreshCountdown;
+
+            RedisCacheConfiguration config = cacheConfig.entryTtl(Duration.ofSeconds(physicalTtl));
+            return new CustomRedisCache(cacheName, cacheWriter, config, refreshAge, cacheRefreshExecutor);
+        }
+
+        // 2. 尝试匹配 name#expire 格式
+        Matcher matcherExpire = PATTERN_ONLY_EXPIRE.matcher(name);
+        if (matcherExpire.find()) {
+            String cacheName = matcherExpire.group(1);
+            long expire = Long.parseLong(matcherExpire.group(2));
+
+            // 仅设置物理过期时间，使用默认的RedisCache实现（无自动刷新逻辑）
+            RedisCacheConfiguration config = cacheConfig.entryTtl(Duration.ofSeconds(expire));
             return super.createRedisCache(cacheName, config);
         }
+
+        // 3. 默认情况
         return super.createRedisCache(name, cacheConfig);
     }
 }

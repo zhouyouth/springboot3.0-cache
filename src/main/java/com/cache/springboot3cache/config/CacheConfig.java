@@ -1,68 +1,73 @@
 package com.cache.springboot3cache.config;
 
-import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.CachingConfigurerSupport;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.redis.cache.RedisCache;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
-import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.cache.RedisCacheWriter;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.serializer.JdkSerializationRedisSerializer;
+import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
-import java.time.Duration;
 import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
 
+/**
+ * 缓存配置类
+ * 配置Redis缓存管理器以及用于异步刷新缓存的线程池
+ */
 @Configuration
-@EnableCaching
-public class CacheConfig {
+public class CacheConfig extends CachingConfigurerSupport {
 
     /**
-     * 用于执行异步缓存刷新的线程池
+     * 配置用于缓存异步刷新的线程池
+     * 使用ThreadPoolTaskExecutor创建线程池，避免占用公共线程资源
+     *
+     * @return Executor 线程池实例
      */
-    @Bean
+    @Bean(name = "cacheRefreshExecutor")
     public Executor cacheRefreshExecutor() {
-        return Executors.newFixedThreadPool(5);
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        // 核心线程数
+        executor.setCorePoolSize(10);
+        // 最大线程数
+        executor.setMaxPoolSize(50);
+        // 队列容量
+        executor.setQueueCapacity(1000);
+        // 线程名前缀
+        executor.setThreadNamePrefix("springboot3CacheRefresh-");
+        // 拒绝策略：如果队列满了，直接丢弃任务，避免阻塞主流程
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardPolicy());
+        // 优雅关闭：等待任务完成
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(60);
+        executor.initialize();
+        return executor;
     }
 
+    /**
+     * 配置自定义的Redis缓存管理器
+     *
+     * @param connectionFactory Redis连接工厂
+     * @param cacheRefreshExecutor 异步刷新线程池
+     * @return CacheManager 缓存管理器实例
+     */
     @Bean
-    public RedisCacheManager customRedisCacheManager(RedisConnectionFactory redisConnectionFactory, Executor cacheRefreshExecutor) {
-        RedisCacheWriter redisCacheWriter = RedisCacheWriter.nonLockingRedisCacheWriter(redisConnectionFactory);
-
-        // 关键修复：配置正确的 Key 和 Value 序列化器
-        // Key 使用 String 序列化器
-        // Value 使用 JdkSerializationRedisSerializer，以便能正确序列化/反序列化 RefreshWrapper 对象
-        RedisCacheConfiguration defaultCacheConfig = RedisCacheConfiguration.defaultCacheConfig()
+    public CacheManager cacheManager(RedisConnectionFactory connectionFactory, Executor cacheRefreshExecutor) {
+        // 创建无锁的RedisCacheWriter
+        RedisCacheWriter writer = RedisCacheWriter.nonLockingRedisCacheWriter(connectionFactory);
+        
+        // 配置默认的Redis缓存配置
+        // key使用String序列化
+        // value使用JSON序列化
+        RedisCacheConfiguration config = RedisCacheConfiguration.defaultCacheConfig()
                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
-                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(new JdkSerializationRedisSerializer(getClass().getClassLoader())));
-
-        return new RedisCacheManager(redisCacheWriter, defaultCacheConfig) {
-            @Override
-            protected RedisCache createRedisCache(String name, RedisCacheConfiguration cacheConfig) {
-                String[] parts = name.split("#");
-                String cacheName = parts[0];
-
-                // 解析 name#ttl#refresh 格式
-                if (parts.length > 2) {
-                    Duration ttl = Duration.ofSeconds(Long.parseLong(parts[1]));
-                    long refreshInSeconds = Long.parseLong(parts[2]);
-
-                    // 应用解析出的 TTL
-                    RedisCacheConfiguration newConfig = cacheConfig.entryTtl(ttl);
-                    return new CustomRedisCache(cacheName, redisCacheWriter, newConfig, refreshInSeconds, cacheRefreshExecutor);
-                }
-                
-                // 补充：解析 name#ttl 格式 (例如: test#60)
-                if (parts.length > 1) {
-                    Duration ttl = Duration.ofSeconds(Long.parseLong(parts[1]));
-                    return super.createRedisCache(cacheName, cacheConfig.entryTtl(ttl));
-                }
-
-                return super.createRedisCache(name, cacheConfig);
-            }
-        };
+                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer()));
+        
+        // 返回自定义的动态Redis缓存管理器
+        return new DynamicRedisCacheManager(writer, config, cacheRefreshExecutor);
     }
 }

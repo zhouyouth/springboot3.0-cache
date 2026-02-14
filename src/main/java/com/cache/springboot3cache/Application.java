@@ -49,6 +49,7 @@ public class Application implements CommandLineRunner {
                 try {
                     // 调用缓存服务获取数据
                     System.out.println("Cache value: " + cacheService.get("test"));
+                    System.out.println("Cache value: " + cacheService.get3("get3"));
                     System.out.println("Cache value: " + cacheService.getAsync("test_Async"));
                     System.out.println("Cache value: " + cacheService.getNoFresh("test_NoFresh"));
                     System.out.println("Cache value: " + cacheService.getNoFreshNoSync("test_NoFreshNoSync"));
