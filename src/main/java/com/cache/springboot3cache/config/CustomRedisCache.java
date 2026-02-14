@@ -13,6 +13,7 @@ import java.util.Arrays;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.Executor;
 
 /**
@@ -95,7 +96,7 @@ public class CustomRedisCache extends RedisCache {
                 byte[] lockKey = createLockKey(key);
                 boolean locked = false;
                 try {
-                    locked = tryLock(lockKey, "1".getBytes());
+                    locked = tryLock(lockKey, "1".getBytes(StandardCharsets.UTF_8));
                 } catch (Exception e) {
                     logger.error("Failed to acquire lock for key: {}", key, e);
                 }
@@ -141,7 +142,7 @@ public class CustomRedisCache extends RedisCache {
                 // 尝试获取分布式锁
                 boolean locked = false;
                 try {
-                    locked = tryLock(lockKey, lockValue.getBytes());
+                    locked = tryLock(lockKey, lockValue.getBytes(StandardCharsets.UTF_8));
                 } catch (Exception e) {
                     logger.error("Failed to acquire lock for key: {}", key, e);
                 }
@@ -159,7 +160,7 @@ public class CustomRedisCache extends RedisCache {
                         } finally {
                             // 刷新完成后释放锁
                             try {
-                                releaseLock(lockKey, lockValue.getBytes());
+                                releaseLock(lockKey, lockValue.getBytes(StandardCharsets.UTF_8));
                             } catch (Exception e) {
                                 logger.error("Failed to release lock for key: {}", key, e);
                             }

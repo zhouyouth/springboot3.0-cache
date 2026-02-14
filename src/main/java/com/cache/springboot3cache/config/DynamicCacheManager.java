@@ -10,13 +10,10 @@ import java.util.Collections;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class DynamicCacheManager implements CacheManager {
 
     private final ConcurrentMap<String, Cache> cacheMap = new ConcurrentHashMap<>();
-    private static final Pattern PATTERN = Pattern.compile("(.+)#(\\d+)#(\\d+)");
 
     @Override
     public Cache getCache(String name) {
@@ -24,11 +21,12 @@ public class DynamicCacheManager implements CacheManager {
     }
 
     private Cache createCache(String name) {
-        Matcher matcher = PATTERN.matcher(name);
-        if (matcher.find()) {
-            String cacheName = matcher.group(1);
-            long expire = Long.parseLong(matcher.group(2));
-            long refresh = Long.parseLong(matcher.group(3));
+        String[] parts = name.split("#");
+        String cacheName = parts[0];
+
+        if (parts.length > 2) {
+            long expire = Long.parseLong(parts[1]);
+            long refresh = Long.parseLong(parts[2]);
 
             StatefulCacheLoader cacheLoader = new StatefulCacheLoader();
             Caffeine<Object, Object> caffeine = Caffeine.newBuilder()
@@ -36,6 +34,11 @@ public class DynamicCacheManager implements CacheManager {
                     .refreshAfterWrite(refresh, TimeUnit.SECONDS);
 
             return new StatefulCaffeineCache(cacheName, caffeine.build(cacheLoader), cacheLoader);
+        } else if (parts.length > 1) {
+            long expire = Long.parseLong(parts[1]);
+            Caffeine<Object, Object> caffeine = Caffeine.newBuilder()
+                    .expireAfterWrite(expire, TimeUnit.SECONDS);
+            return new CaffeineCache(cacheName, caffeine.build());
         } else {
             return new CaffeineCache(name, Caffeine.newBuilder().build());
         }

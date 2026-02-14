@@ -7,8 +7,6 @@ import org.springframework.data.redis.cache.RedisCacheWriter;
 
 import java.time.Duration;
 import java.util.concurrent.Executor;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * 动态Redis缓存管理器
@@ -17,8 +15,6 @@ import java.util.regex.Pattern;
  */
 public class DynamicRedisCacheManager extends RedisCacheManager {
 
-    // 缓存名称解析正则表达式：name#expire#grace
-    private static final Pattern PATTERN = Pattern.compile("(.+)#(\\d+)#(\\d+)");
     private final RedisCacheWriter cacheWriter;
     private final Executor cacheRefreshExecutor;
 
@@ -46,28 +42,37 @@ public class DynamicRedisCacheManager extends RedisCacheManager {
      */
     @Override
     protected RedisCache createRedisCache(String name, RedisCacheConfiguration cacheConfig) {
-        Matcher matcher = PATTERN.matcher(name);
-        if (matcher.find()) {
-            String cacheName = matcher.group(1);
-            long expire = Long.parseLong(matcher.group(2));
-            long gracePeriod = Long.parseLong(matcher.group(3));
+        // 使用 split 替代正则，支持更灵活的配置格式
+        String[] parts = name.split("#");
+        String cacheName = parts[0];
 
-            // 刷新触发点：逻辑过期时间 - 宽限期
-            // 例如：6#3 -> 6 - 3 = 3秒后开始刷新
-            long refreshAge = expire - gracePeriod;
-            if (refreshAge < 0) {
-                refreshAge = 0; // 避免负数
+        if (parts.length > 1) {
+            long expire = Long.parseLong(parts[1]);
+            // 默认不设置宽限期/刷新逻辑
+            RedisCacheConfiguration config = cacheConfig.entryTtl(Duration.ofSeconds(expire));
+
+            // 如果配置了第三个参数 (gracePeriod)，则启用 CustomRedisCache 的刷新逻辑
+            if (parts.length > 2) {
+                long gracePeriod = Long.parseLong(parts[2]);
+
+                // 刷新触发点：逻辑过期时间 - 宽限期
+                // 例如：6#3 -> 6 - 3 = 3秒后开始刷新
+                long refreshAge = expire - gracePeriod;
+                if (refreshAge < 0) {
+                    refreshAge = 0; // 避免负数
+                }
+
+                // 物理TTL = 逻辑过期时间 + 宽限期
+                // 这为异步刷新提供了足够的时间，防止物理过期
+                long physicalTtl = expire + gracePeriod;
+                config = config.entryTtl(Duration.ofSeconds(physicalTtl));
+
+                // 创建支持自动刷新的CustomRedisCache
+                return new CustomRedisCache(cacheName, cacheWriter, config, refreshAge, cacheRefreshExecutor);
             }
 
-            // 物理TTL = 逻辑过期时间 + 宽限期
-            // 这为异步刷新提供了足够的时间，防止物理过期
-            long physicalTtl = expire + gracePeriod;
-
-            // 设置物理过期时间
-            RedisCacheConfiguration config = cacheConfig.entryTtl(Duration.ofSeconds(physicalTtl));
-            
-            // 创建支持自动刷新的CustomRedisCache，传入计算后的refreshAge
-            return new CustomRedisCache(cacheName, cacheWriter, config, refreshAge, cacheRefreshExecutor);
+            // 仅设置了过期时间，使用默认 RedisCache (或根据需求决定是否用 CustomRedisCache 但不刷新)
+            return super.createRedisCache(cacheName, config);
         }
         return super.createRedisCache(name, cacheConfig);
     }

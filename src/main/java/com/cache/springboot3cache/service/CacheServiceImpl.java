@@ -42,9 +42,28 @@ public class CacheServiceImpl implements CacheService {
         // 返回带自增序号的字符串，以便观察缓存刷新效果
         return "getAsync-" + atomicInteger.incrementAndGet();
     }
+    @Override
+    @Cacheable(cacheNames = "testNoFresh#12", key = "#key", sync = true)
+    public String getNoFresh(String key) {
+        System.out.println("getNoFresh from method");
+        // 返回带自增序号的字符串，以便观察缓存刷新效果
+        return "getNoFresh-" + atomicInteger.incrementAndGet();
+    }
 
+    @Cacheable(cacheNames = "testNoFresh#12", key = "#key", sync = false)
+    @Override
+    public String getNoFresh2(String key) {
+        System.out.println("getNoFresh2 from method");
+        return "getNoFresh2-" + atomicInteger.incrementAndGet();
+    }
 
-
+    @Override
+    @Cacheable(cacheNames = "testNoFreshNoSync#15", key = "#key", sync = false)
+    public String getNoFreshNoSync(String key) {
+        System.out.println("getNoFreshNoSync from method");
+        // 返回带自增序号的字符串，以便观察缓存刷新效果
+        return "getNoFreshNoSync-" + atomicInteger.incrementAndGet();
+    }
 
 
 }
