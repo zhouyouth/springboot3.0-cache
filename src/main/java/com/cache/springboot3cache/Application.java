@@ -51,8 +51,8 @@ public class Application implements CommandLineRunner {
                     System.out.println("Cache value: " + cacheService.get("test"));
                     System.out.println("Cache value: " + cacheService.get3("get3"));
                     System.out.println("Cache value: " + cacheService.getAsync("test_Async"));
-                    System.out.println("Cache value: " + cacheService.getNoFresh("test_NoFresh"));
-                    System.out.println("Cache value: " + cacheService.getNoFreshNoSync("test_NoFreshNoSync"));
+                   // System.out.println("Cache value: " + cacheService.getNoFresh("test_NoFresh"));
+                   // System.out.println("Cache value: " + cacheService.getNoFreshNoSync("test_NoFreshNoSync"));
 //                    System.out.println("Cache value: " + cacheService.getNoFreshNoSync("test_NoFreshNoSync"));
                     // 休眠1秒
                     TimeUnit.SECONDS.sleep(1);
