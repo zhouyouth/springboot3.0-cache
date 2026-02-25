@@ -40,8 +40,8 @@ public class CacheServiceImpl implements CacheService {
     }
 
     @Override
-    @Cacheable(cacheNames = "testAsync#9#1", key = "#key", sync = true)
-    public String getAsync(String key) {
+    @Cacheable(cacheNames = "testAsync#9#1",keyGenerator = "customKeyGenerator", sync = true)
+    public String getAsync() {
         System.out.println("getAsync from method");
         return "async-" + atomicInteger.incrementAndGet();
     }

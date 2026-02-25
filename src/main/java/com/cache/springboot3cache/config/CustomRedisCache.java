@@ -46,12 +46,15 @@ public class CustomRedisCache extends RedisCache {
 
         if (value instanceof RefreshWrapper) {
             RefreshWrapper wrapper = (RefreshWrapper) value;
-            long age = System.currentTimeMillis() - wrapper.getCreateTime();
             
-            // 2. 检查逻辑过期
-            if (age > refreshInSeconds * 1000) {
-                // logger.info("Cache key {} is stale (age={}ms), triggering async refresh...", key, age);
-                refreshAsync(key);
+            // 如果 refreshInSeconds < 0，表示不启用自动刷新
+            if (refreshInSeconds >= 0) {
+                long age = System.currentTimeMillis() - wrapper.getCreateTime();
+                // 2. 检查逻辑过期
+                if (age > refreshInSeconds * 1000) {
+                    // logger.info("Cache key {} is stale (age={}ms), triggering async refresh...", key, age);
+                    refreshAsync(key);
+                }
             }
             
             // 3. 无论是否过期，都立即返回当前值 (Refresh-Ahead 核心)

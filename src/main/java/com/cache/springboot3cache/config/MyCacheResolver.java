@@ -79,9 +79,9 @@ public class MyCacheResolver implements CacheResolver {
             
             RedisCacheConfiguration config = defaultCacheConfig.entryTtl(Duration.ofSeconds(expire));
             
-            // 使用 CustomRedisCache，refreshAge = expire + 99999 (永远不触发刷新)
+            // 使用 CustomRedisCache，refreshAge = -1 (不触发刷新)
             // 传入 redisTemplate，context 为 null
-            return Collections.singletonList(new CustomRedisCache(name, cacheWriter, config, expire + 99999, cacheRefreshExecutor, stringRedisTemplate, redisTemplate, null));
+            return Collections.singletonList(new CustomRedisCache(name, cacheWriter, config, -1, cacheRefreshExecutor, stringRedisTemplate, redisTemplate, null));
         }
 
         // 3. 默认情况

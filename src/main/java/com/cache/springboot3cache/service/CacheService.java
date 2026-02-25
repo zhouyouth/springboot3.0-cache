@@ -13,5 +13,5 @@ public interface CacheService {
 
     String get3(String key);
     
-    String getAsync(String key);
+    String getAsync();
 }
