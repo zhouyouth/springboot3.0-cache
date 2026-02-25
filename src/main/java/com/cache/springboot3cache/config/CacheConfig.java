@@ -1,7 +1,7 @@
 package com.cache.springboot3cache.config;
 
-import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CachingConfigurer;
@@ -10,7 +10,6 @@ import org.springframework.cache.interceptor.CacheResolver;
 import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.cache.RedisCacheWriter;
@@ -30,11 +29,12 @@ import java.util.concurrent.atomic.AtomicLong;
 @Configuration
 public class CacheConfig implements CachingConfigurer {
 
-    private static final Logger logger = LoggerFactory.getLogger(CacheConfig.class);
+    // 使用 ObjectProvider 延迟获取 Bean，解决循环依赖问题，比 @Lazy 更优雅
+    private final ObjectProvider<CacheResolver> cacheResolverProvider;
 
-    @Autowired
-    @Lazy
-    private CacheResolver myCacheResolver;
+    public CacheConfig(ObjectProvider<CacheResolver> cacheResolverProvider) {
+        this.cacheResolverProvider = cacheResolverProvider;
+    }
 
     @Bean
     @Override
@@ -50,10 +50,9 @@ public class CacheConfig implements CachingConfigurer {
         executor.setQueueCapacity(1000);
         executor.setThreadNamePrefix("springboot3CacheRefresh-");
         
-        // 自定义拒绝策略：记录日志并丢弃，带简单的限流防止日志爆炸
         executor.setRejectedExecutionHandler(new RejectedExecutionHandler() {
             private final AtomicLong lastLogTime = new AtomicLong(0);
-            private static final long LOG_INTERVAL_MS = 5000; // 每5秒最多打印一次
+            private static final long LOG_INTERVAL_MS = 5000;
 
             @Override
             public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
@@ -61,10 +60,11 @@ public class CacheConfig implements CachingConfigurer {
                 long last = lastLogTime.get();
                 if (now - last > LOG_INTERVAL_MS) {
                     if (lastLogTime.compareAndSet(last, now)) {
-                        logger.warn("Cache refresh task rejected! Queue capacity exceeded. Task: {}", r.toString());
+                        // logger is not static here, need to get it or use System.err
+                        // Using System.err for simplicity in anonymous class or LoggerFactory
+                        LoggerFactory.getLogger(CacheConfig.class).warn("Cache refresh task rejected! Queue capacity exceeded. Task: {}", r.toString());
                     }
                 }
-                // 依然执行丢弃策略，不抛出异常
             }
         });
         
@@ -106,8 +106,7 @@ public class CacheConfig implements CachingConfigurer {
 
     @Override
     public CacheResolver cacheResolver() {
-        logger.info("Providing custom CacheResolver");
-        return myCacheResolver;
+        return cacheResolverProvider.getIfAvailable();
     }
 
     @Override
