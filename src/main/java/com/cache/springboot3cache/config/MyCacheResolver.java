@@ -65,9 +65,8 @@ public class MyCacheResolver implements CacheResolver {
 
             RedisCacheConfiguration config = defaultCacheConfig.entryTtl(Duration.ofSeconds(physicalTtl));
             
-            // 创建 CustomRedisCache，传入 context 用于手动调用目标方法
-            // 移除 redisTemplate 参数
-            CustomRedisCache customCache = new CustomRedisCache(name, cacheWriter, config, refreshAge, cacheRefreshExecutor, stringRedisTemplate, context);
+            // 创建 CustomRedisCache，传入 context 和 redisTemplate
+            CustomRedisCache customCache = new CustomRedisCache(name, cacheWriter, config, refreshAge, cacheRefreshExecutor, stringRedisTemplate, redisTemplate, context);
             logger.info("Created CustomRedisCache: {}", System.identityHashCode(customCache));
             return Collections.singletonList(customCache);
         }
@@ -81,7 +80,8 @@ public class MyCacheResolver implements CacheResolver {
             RedisCacheConfiguration config = defaultCacheConfig.entryTtl(Duration.ofSeconds(expire));
             
             // 使用 CustomRedisCache，refreshAge = expire + 99999 (永远不触发刷新)
-            return Collections.singletonList(new CustomRedisCache(name, cacheWriter, config, expire + 99999, cacheRefreshExecutor, stringRedisTemplate, null));
+            // 传入 redisTemplate，context 为 null
+            return Collections.singletonList(new CustomRedisCache(name, cacheWriter, config, expire + 99999, cacheRefreshExecutor, stringRedisTemplate, redisTemplate, null));
         }
 
         // 3. 默认情况
