@@ -23,6 +23,9 @@ public class MyCacheResolver implements CacheResolver {
     private static final Logger logger = LoggerFactory.getLogger(MyCacheResolver.class);
     private static final Pattern PATTERN_WITH_REFRESH = Pattern.compile("(.+)#(\\d+)#(\\d+)");
     private static final Pattern PATTERN_ONLY_EXPIRE = Pattern.compile("(.+)#(\\d+)");
+    
+    // 默认分布式锁超时时间（秒）
+    private static final long DEFAULT_LOCK_TIMEOUT_SECONDS = 60;
 
     private final CacheManager cacheManager;
     private final RedisCacheWriter cacheWriter;
@@ -65,8 +68,8 @@ public class MyCacheResolver implements CacheResolver {
 
             RedisCacheConfiguration config = defaultCacheConfig.entryTtl(Duration.ofSeconds(physicalTtl));
             
-            // 创建 CustomRedisCache，传入 context 和 redisTemplate
-            CustomRedisCache customCache = new CustomRedisCache(name, cacheWriter, config, refreshAge, cacheRefreshExecutor, stringRedisTemplate, redisTemplate, context);
+            // 创建 CustomRedisCache，传入 context 和 redisTemplate，以及锁超时时间
+            CustomRedisCache customCache = new CustomRedisCache(name, cacheWriter, config, refreshAge, DEFAULT_LOCK_TIMEOUT_SECONDS, cacheRefreshExecutor, stringRedisTemplate, redisTemplate, context);
             logger.info("Created CustomRedisCache: {}", System.identityHashCode(customCache));
             return Collections.singletonList(customCache);
         }
@@ -81,7 +84,7 @@ public class MyCacheResolver implements CacheResolver {
             
             // 使用 CustomRedisCache，refreshAge = -1 (不触发刷新)
             // 传入 redisTemplate，context 为 null
-            return Collections.singletonList(new CustomRedisCache(name, cacheWriter, config, -1, cacheRefreshExecutor, stringRedisTemplate, redisTemplate, null));
+            return Collections.singletonList(new CustomRedisCache(name, cacheWriter, config, -1, DEFAULT_LOCK_TIMEOUT_SECONDS, cacheRefreshExecutor, stringRedisTemplate, redisTemplate, null));
         }
 
         // 3. 默认情况

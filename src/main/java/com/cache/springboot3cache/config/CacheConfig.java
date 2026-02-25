@@ -1,5 +1,7 @@
 package com.cache.springboot3cache.config;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CachingConfigurer;
@@ -21,10 +23,14 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Configuration
 public class CacheConfig implements CachingConfigurer {
+
+    private static final Logger logger = LoggerFactory.getLogger(CacheConfig.class);
 
     @Autowired
     @Lazy
@@ -43,7 +49,25 @@ public class CacheConfig implements CachingConfigurer {
         executor.setMaxPoolSize(50);
         executor.setQueueCapacity(1000);
         executor.setThreadNamePrefix("springboot3CacheRefresh-");
-        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardPolicy());
+        
+        // 自定义拒绝策略：记录日志并丢弃，带简单的限流防止日志爆炸
+        executor.setRejectedExecutionHandler(new RejectedExecutionHandler() {
+            private final AtomicLong lastLogTime = new AtomicLong(0);
+            private static final long LOG_INTERVAL_MS = 5000; // 每5秒最多打印一次
+
+            @Override
+            public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
+                long now = System.currentTimeMillis();
+                long last = lastLogTime.get();
+                if (now - last > LOG_INTERVAL_MS) {
+                    if (lastLogTime.compareAndSet(last, now)) {
+                        logger.warn("Cache refresh task rejected! Queue capacity exceeded. Task: {}", r.toString());
+                    }
+                }
+                // 依然执行丢弃策略，不抛出异常
+            }
+        });
+        
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(60);
         executor.initialize();
@@ -82,6 +106,7 @@ public class CacheConfig implements CachingConfigurer {
 
     @Override
     public CacheResolver cacheResolver() {
+        logger.info("Providing custom CacheResolver");
         return myCacheResolver;
     }
 

@@ -23,15 +23,17 @@ public class CustomRedisCache extends RedisCache {
 
     private static final Logger logger = LoggerFactory.getLogger(CustomRedisCache.class);
     private final long refreshInSeconds;
+    private final long lockTimeoutSeconds;
     private final Executor executor;
     private final StringRedisTemplate stringRedisTemplate;
     private final RedisTemplate<Object, Object> redisTemplate;
     private final CacheOperationInvocationContext<?> context;
     private static final String LOCK_SUFFIX = "~lock";
 
-    protected CustomRedisCache(String name, RedisCacheWriter cacheWriter, RedisCacheConfiguration cacheConfig, long refreshInSeconds, Executor executor, StringRedisTemplate stringRedisTemplate, RedisTemplate<Object, Object> redisTemplate, CacheOperationInvocationContext<?> context) {
+    protected CustomRedisCache(String name, RedisCacheWriter cacheWriter, RedisCacheConfiguration cacheConfig, long refreshInSeconds, long lockTimeoutSeconds, Executor executor, StringRedisTemplate stringRedisTemplate, RedisTemplate<Object, Object> redisTemplate, CacheOperationInvocationContext<?> context) {
         super(name, cacheWriter, cacheConfig);
         this.refreshInSeconds = refreshInSeconds;
+        this.lockTimeoutSeconds = lockTimeoutSeconds;
         this.executor = executor;
         this.stringRedisTemplate = stringRedisTemplate;
         this.redisTemplate = redisTemplate;
@@ -63,7 +65,7 @@ public class CustomRedisCache extends RedisCache {
         String lockKey = createLockKey(key);
         String lockValue = UUID.randomUUID().toString();
 
-        Boolean locked = stringRedisTemplate.opsForValue().setIfAbsent(lockKey, lockValue, Duration.ofSeconds(10));
+        Boolean locked = stringRedisTemplate.opsForValue().setIfAbsent(lockKey, lockValue, Duration.ofSeconds(lockTimeoutSeconds));
         
         if (Boolean.TRUE.equals(locked)) {
             CompletableFuture.runAsync(() -> {
